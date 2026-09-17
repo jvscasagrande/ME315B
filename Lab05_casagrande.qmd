@@ -1,0 +1,130 @@
+---
+title: "Laboratório 05"
+subtitle: "ra: 175886"
+author: " Joao Vitor Saes Casagrande"
+format:
+  pdf: default
+editor: visual
+---
+
+```{r}
+library(tidyverse)
+library(leaflet)
+library(lubridate)
+library(htmlwidgets)
+
+analisa_aeronave <- function(tail_number, arquivo) {
+  
+  funcao_filtro <- function(pedaco_de_dados, indice_posicao) {
+    pedaco_de_dados %>%
+      dplyr::filter(TAIL_NUMBER == tail_number)
+  }
+  
+  dados_brutos_aeronave <- readr::read_csv_chunked(
+    file = arquivo,
+    callback = readr::DataFrameCallback$new(funcao_filtro),
+    chunk_size = 100000,
+    show_col_types = FALSE
+  )
+  
+  # 2  Limpeza, Ordenação Temporal e Formatação (Tidy Data)
+ tabela_tidy_voos <- dados_brutos_aeronave %>%
+    # Filtra voos cancelados ou sem horário de partida para evitar erros no mapa
+    dplyr::filter(!is.na(DEPARTURE_TIME)) %>%
+    dplyr::mutate(
+      # Cria uma coluna de data unindo YEAR, MONTH e DAY
+      DATA_VOO = lubridate::make_date(YEAR, MONTH, DAY),
+      
+      # DEPARTURE_TIME normalmente vem como número inteiro 
+      # Formatamos adicionando zeros à esquerda para garantir 4 caracteres.
+      HORA_FORMATADA = stringr::str_pad(DEPARTURE_TIME, width = 4, pad = "0"),
+      HORA_FORMATADA = paste0(substr(HORA_FORMATADA, 1, 2), ":", substr(HORA_FORMATADA, 3, 4)),
+      
+      # Combina Data e Hora em um único formato datetime
+      DATA_HORA_PARTIDA = lubridate::ymd_hm(paste(DATA_VOO, HORA_FORMATADA)),
+      
+      # Calcula a velocidade média do trajeto: Distância em milhas / Tempo em horas
+      VELOCIDADE_MEDIA_MPH = DISTANCE / (AIR_TIME / 60)
+    ) %>%
+    # Ordena cronologicamente para garantir que o trajeto seja linear no tempo
+    dplyr::arrange(DATA_HORA_PARTIDA)
+  
+  # 3. Cruzamento com Coordenadas dos Aeroportos
+  # "airports.csv" está na mesma pasta do arquivo de voos
+  diretorio_dados <- dirname(arquivo)
+  arquivo_aeroportos <- file.path(diretorio_dados, "airports.csv")
+  
+  # Lê o arquivo de aeroportos
+  tabela_aeroportos <- readr::read_csv(arquivo_aeroportos, show_col_types = FALSE) %>%
+    dplyr::select(IATA_CODE, LATITUDE, LONGITUDE)
+  
+  # Adiciona latitude e longitude da Origem e do Destino na tabela de voos
+  tabela_com_coordenadas <- tabela_tidy_voos %>%
+    dplyr::left_join(tabela_aeroportos, by = c("ORIGIN_AIRPORT" = "IATA_CODE")) %>%
+    dplyr::rename(LAT_ORIGEM = LATITUDE, LON_ORIGEM = LONGITUDE) %>%
+    
+    dplyr::left_join(tabela_aeroportos, by = c("DESTINATION_AIRPORT" = "IATA_CODE")) %>%
+    dplyr::rename(LAT_DESTINO = LATITUDE, LON_DESTINO = LONGITUDE) %>%
+    
+    # Remove voos que tenham aeroportos sem coordenadas registradas
+    dplyr::filter(!is.na(LAT_ORIGEM) & !is.na(LAT_DESTINO))
+  
+  # 4. Construção do Mapa (Leaflet)
+  # Inicia o mapa base com tiles simples (CartoDB Positron)
+  mapa_trajeto_anual <- leaflet::leaflet() %>%
+    leaflet::addProviderTiles(leaflet::providers$CartoDB.Positron)
+  
+  # Itera sobre os voos em ordem cronológica para desenhar os trajetos
+  # O loop é ideal aqui pois Leaflet lida com a espessura de linhas segmento a segmento.
+  for(indice in seq_len(nrow(tabela_com_coordenadas))) {
+    
+    voo_atual <- tabela_com_coordenadas[indice, ]
+    
+    # Define a espessura da linha com base na velocidade média. 
+    # Valores divididos por 100 para manter a estética visual do mapa proporcional.
+    espessura_estatistica <- ifelse(is.na(voo_atual$VELOCIDADE_MEDIA_MPH), 
+                                    1, 
+                                    voo_atual$VELOCIDADE_MEDIA_MPH / 100)
+    
+    # Cria um popup para cada segmento de voo
+    info_voo_html <- paste0(
+      "<b>Voo:</b> ", voo_atual$ORIGIN_AIRPORT, " ➔ ", voo_atual$DESTINATION_AIRPORT, "<br>",
+      "<b>Data/Hora:</b> ", voo_atual$DATA_HORA_PARTIDA, "<br>",
+      "<b>Velocidade Média:</b> ", round(voo_atual$VELOCIDADE_MEDIA_MPH, 1), " mph<br>",
+      "<b>Distância:</b> ", voo_atual$DISTANCE, " milhas"
+    )
+    
+    # Adiciona o trajeto no mapa
+    mapa_trajeto_anual <- mapa_trajeto_anual %>%
+      leaflet::addPolylines(
+        lng = c(voo_atual$LON_ORIGEM, voo_atual$LON_DESTINO),
+        lat = c(voo_atual$LAT_ORIGEM, voo_atual$LAT_DESTINO),
+        weight = espessura_estatistica,
+        color = "#2c3e50",       # Cor das rotas (Azul escuro)
+        opacity = 0.5,           # Transparência para sobreposição visível
+        popup = info_voo_html
+      )
+  }
+  resultado_final <- list(
+    tabela = tabela_tidy_voos,
+    mapa = mapa_trajeto_anual
+  )
+  
+  return(resultado_final)
+}
+
+  
+```
+
+```{r}
+resultado_voos <- analisa_aeronave(
+  tail_number = "N431WN",
+  arquivo = "flights.csv.zip"
+)
+resultado_voos
+```
+
+```{r}
+Sys.setenv(TZ = "America/Sao_Paulo")
+Sys.time()
+```
