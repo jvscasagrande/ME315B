@@ -1,0 +1,108 @@
+---
+title: "Laboratório 6"
+subtitle: "ra: 175886"
+author: "João Vitor Saes Casagrande"
+date: "2026-09-21"
+format:
+  pdf: default
+---
+
+```{r}
+library(DBI)
+library(RSQLite)
+library(dplyr)
+#Conexao com SQL
+path <- getwd() 
+fname <- file.path(path, "disco.db")
+
+# 2. Conectar ao arquivo de banco de dados
+conn <- dbConnect(RSQLite::SQLite(), fname)
+
+```
+
+
+3. Listar as tabelas existentes no banco de dados
+```{r}
+DBI::dbListTables(conn)
+
+```
+
+4.  Identifique os nomes de todas as colunas existentes na tabela customers.
+
+```{r}
+dbListFields(conn, "customers")
+
+```
+
+5. Utilizando apenas SQLite, com o apoio do comando dbGetQuery, identifique quantos clientes estão atualmente cadastrados neste banco de dados.
+
+```{r}
+query_total_clientes <- "SELECT COUNT(*) AS Total_Clientes FROM customers"
+dbGetQuery(conn, query_total_clientes)
+
+```
+
+
+6.  Utilizando apenas SQLite, identifique o número de países diferentes em que moram os clientes encontrados acima.
+
+```{sql connection=conn}
+SELECT COUNT(DISTINCT Country) AS Total_Paises 
+FROM customers
+
+```
+
+7. Utilizando apenas SQLite, quantos clientes existem por país? A tabela resultante deve conter o nome do país e a respectiva contagem, além de ser ordenada de maneira decrescente pela referida contagem.
+
+```{sql connection=conn}
+
+SELECT Country, COUNT(*) AS Quantidade 
+FROM customers 
+GROUP BY Country 
+ORDER BY Quantidade DESC
+  
+```
+
+8.  Quais são os 5 países com mais clientes registrados? Use apenas SQLite.
+```{sql connection=conn}
+SELECT Country, COUNT(*) AS Quantidade 
+FROM customers 
+GROUP BY Country 
+ORDER BY Quantidade DESC 
+LIMIT 5
+
+```
+
+
+9. Quais são os países registrados que possuem apenas 6 letras no nome?
+```{sql connection=conn}
+SELECT DISTINCT Country 
+FROM customers 
+WHERE Country GLOB '??????'
+
+```
+
+10. Quais foram as músicas compradas por clientes brasileiros?
+
+```{sql connection=conn}
+SELECT DISTINCT t.Name AS Nome_Musica
+FROM customers c
+INNER JOIN invoices i ON c.CustomerId = i.CustomerId
+INNER JOIN invoice_items ii ON i.InvoiceId = ii.InvoiceId
+INNER JOIN tracks t ON ii.TrackId = t.TrackId
+WHERE c.Country = 'Brazil'
+
+```
+
+11. Desconectar do banco de dados
+
+```{r}
+dbDisconnect(conn)
+
+```
+
+
+```{r}
+Sys.setenv(TZ = "America/Sao_Paulo")
+Sys.time()
+
+```
