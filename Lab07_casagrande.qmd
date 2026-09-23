@@ -1,0 +1,145 @@
+---
+title: "Laboratório 7"
+subtitle: "ra: 175886"
+author: "João Vitor Saes Casagrande"
+date: "2026-09-23"
+format:
+  pdf: default
+---
+1. Baixe o arquivo uwmadison.sqlite3. Conecte-se a ele usando o pacote RSQLite, armazenando a conexão em uma variável conn.
+
+```{r}
+library(DBI)
+library(RSQLite)
+
+conn <- dbConnect(RSQLite::SQLite(), "C:\\Users\\jvsca\\Desktop\\Unicamp\\Banco de Dados\\lab 07\\uwmadison.sqlite3")
+
+dbListTables(conn)
+sapply(dbListTables(conn), function(tb) dbListFields(conn, tb))
+
+
+```
+
+
+2. Quem são e quantos são os professores que lecionaram disciplinas cujo tópico era estatística (subjects.abbreviation='STAT')
+
+```{sql connection=conn}
+
+SELECT DISTINCT i.id, i.name
+FROM instructors AS i
+INNER JOIN teachings AS t ON t.instructor_id = i.id
+INNER JOIN sections AS se ON se.uuid = t.section_uuid
+INNER JOIN course_offerings AS co ON co.uuid = se.course_offering_uuid
+INNER JOIN subject_memberships AS sm ON sm.course_offering_uuid = co.uuid
+INNER JOIN subjects AS s ON s.code = sm.subject_code
+WHERE s.abbreviation = 'STAT'
+
+```
+Número exato de professores
+
+```{sql, connection=conn}
+SELECT COUNT(DISTINCT i.id) AS total_professores
+FROM instructors AS i
+INNER JOIN teachings AS t ON t.instructor_id = i.id
+INNER JOIN sections AS se ON se.uuid = t.section_uuid
+INNER JOIN course_offerings AS co ON co.uuid = se.course_offering_uuid
+INNER JOIN subject_memberships AS sm ON sm.course_offering_uuid = co.uuid
+INNER JOIN subjects AS s ON s.code = sm.subject_code
+WHERE s.abbreviation = 'STAT'
+
+```
+
+3. O GPA americano é definido numa escala de 0 a 4, em que A = 4, AB = 3.5, B = 3, BC = 2.5, C = 2, D = 1 e F = 0. Determinando a nota média de cada oferecimento pela ponderação da quantidade de alunos em cada extrato com os valores numéricos de cada conceito, indique (no que se referente a disciplinas no assunto de estatística):
+
+a) Quem é o professor mais difícil?
+b) Quem é o professor mais fácil?
+c) Qual é a disciplina mais difícil?
+d) Qual é a disciplina mais fácil?
+
+ Quem é o professor mais difícil?
+
+```{sql connection=conn}
+SELECT 
+    i.name AS professor_mais_dificil,
+    SUM(gd.a_count * 4.0 + gd.ab_count * 3.5 + gd.b_count * 3.0 + gd.bc_count * 2.5 + gd.c_count * 2.0 + gd.d_count * 1.0 + gd.f_count * 0.0) / 
+    CAST(SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) AS REAL) AS avg_gpa
+FROM grade_distributions gd
+JOIN sections sec ON gd.course_offering_uuid = sec.course_offering_uuid AND gd.section_number = sec.number
+JOIN teachings t ON sec.uuid = t.section_uuid
+JOIN instructors i ON t.instructor_id = i.id
+JOIN subject_memberships sm ON sec.course_offering_uuid = sm.course_offering_uuid
+JOIN subjects sub ON sm.subject_code = sub.code
+WHERE sub.abbreviation = 'STAT' 
+  AND (gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) > 0
+GROUP BY i.name
+ORDER BY avg_gpa ASC
+LIMIT 1
+
+```
+b) Quem é o professor mais fácil?
+
+```{sql connection=conn}
+SELECT 
+    i.name AS professor_mais_facil,
+    SUM(gd.a_count * 4.0 + gd.ab_count * 3.5 + gd.b_count * 3.0 + gd.bc_count * 2.5 + gd.c_count * 2.0 + gd.d_count * 1.0 + gd.f_count * 0.0) / 
+    CAST(SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) AS REAL) AS avg_gpa
+FROM grade_distributions gd
+JOIN sections sec ON gd.course_offering_uuid = sec.course_offering_uuid AND gd.section_number = sec.number
+JOIN teachings t ON sec.uuid = t.section_uuid
+JOIN instructors i ON t.instructor_id = i.id
+JOIN subject_memberships sm ON sec.course_offering_uuid = sm.course_offering_uuid
+JOIN subjects sub ON sm.subject_code = sub.code
+WHERE sub.abbreviation = 'STAT' 
+  AND (gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) > 0
+GROUP BY i.name
+ORDER BY avg_gpa DESC
+LIMIT 1
+
+```
+c) Qual é a disciplina mais difícil?
+
+```{sql connection=conn}
+SELECT 
+    c.name AS disciplina_mais_dificil,
+    SUM(gd.a_count * 4.0 + gd.ab_count * 3.5 + gd.b_count * 3.0 + gd.bc_count * 2.5 + gd.c_count * 2.0 + gd.d_count * 1.0 + gd.f_count * 0.0) / 
+    CAST(SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) AS REAL) AS avg_gpa
+FROM grade_distributions gd
+JOIN course_offerings co ON gd.course_offering_uuid = co.uuid
+JOIN courses c ON co.course_uuid = c.uuid
+JOIN subject_memberships sm ON co.uuid = sm.course_offering_uuid
+JOIN subjects sub ON sm.subject_code = sub.code
+WHERE sub.abbreviation = 'STAT'
+  AND (gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) > 0
+GROUP BY c.name
+ORDER BY avg_gpa ASC
+LIMIT 1;
+```
+d) Qual é a disciplina mais fácil?
+
+```{sql connection=conn}
+SELECT 
+    c.name AS disciplina_mais_facil,
+    SUM(gd.a_count * 4.0 + gd.ab_count * 3.5 + gd.b_count * 3.0 + gd.bc_count * 2.5 + gd.c_count * 2.0 + gd.d_count * 1.0 + gd.f_count * 0.0) / 
+    CAST(SUM(gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) AS REAL) AS avg_gpa
+FROM grade_distributions gd
+JOIN course_offerings co ON gd.course_offering_uuid = co.uuid
+JOIN courses c ON co.course_uuid = c.uuid
+JOIN subject_memberships sm ON co.uuid = sm.course_offering_uuid
+JOIN subjects sub ON sm.subject_code = sub.code
+WHERE sub.abbreviation = 'STAT'
+  AND (gd.a_count + gd.ab_count + gd.b_count + gd.bc_count + gd.c_count + gd.d_count + gd.f_count) > 0
+GROUP BY c.name
+ORDER BY avg_gpa DESC
+LIMIT 1
+```
+
+4. Desconecte do banco de dados.
+```{r}
+dbDisconnect(conn)
+```
+
+```{r}
+Sys.setenv(TZ = "America/Sao_Paulo")
+Sys.time()
+
+```
