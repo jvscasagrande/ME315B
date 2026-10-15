@@ -1,0 +1,68 @@
+---
+title: "Laboratório 9: Polars"
+author: "João Vitor Saes Casagrande"
+format: pdf 
+jupyter: python3
+---
+```{python}
+
+import polars as pl
+pl.Config.set_tbl_formatting("ASCII_MARKDOWN")
+
+basics = pl.read_csv("title.basics0.tsv.gz", separator="\t", null_values=r"\N")
+ratings = pl.read_csv("title.ratings.tsv.gz", separator="\t", null_values=r"\N")
+principals = pl.read_csv("title.principals0.tsv.gz", separator="\t", null_values=r"\N")
+
+   # 1. Quais são os 5 filmes com as maiores notas (averageRating)?
+   # Desempate pelo número de votos recebidos.
+q1 = (
+    basics.filter(pl.col("titleType") == "movie") # Filtrar apenas filmes
+    .join(ratings, on="tconst", how="inner")
+    .sort(by=["averageRating", "numVotes"], descending=[True, True])
+    .select(["tconst", "primaryTitle", "averageRating", "numVotes"])
+    .head(5)
+)
+print("1. Top 5 filmes com maiores notas:")
+print(q1)
+
+  # 2. Qual é o género mais frequente entre os filmes com nota maior que 8?
+q2 = (
+    basics.filter(pl.col("titleType") == "movie")
+    .join(ratings, on="tconst", how="inner")
+    .filter(pl.col("averageRating") > 8)
+    # Separar os géneros (que estão separados por vírgula) numa lista e explodir para múltiplas linhas
+    .select(pl.col("genres").str.split(",").alias("genre"))
+    .explode("genre")
+    .drop_nulls(subset=["genre"]) # Remover eventuais nulos
+    .group_by("genre")
+    .agg(pl.len().alias("frequencia"))
+    .sort("frequencia", descending=True)
+    .head(1)
+)
+print("\n2. Género mais frequente entre filmes com nota > 8:")
+print(q2)
+
+ # 3. Quais são os 3 atores/atrizes que mais participaram de filmes com nota maior que 7.5?
+q3 = (
+    basics.filter(pl.col("titleType") == "movie")
+    .join(ratings, on="tconst", how="inner")
+    .filter(pl.col("averageRating") > 7.5)
+    .join(principals, on="tconst", how="inner")
+    # Filtrar apenas as categorias 'actor' e 'actress'
+    .filter(pl.col("category").is_in(["actor", "actress"]))
+    .group_by("nconst") # Agrupar pelo identificador único da pessoa
+    .agg(pl.col("tconst").n_unique().alias("numero_de_participacoes"))
+    .sort("numero_de_participacoes", descending=True)
+    .head(3)
+)
+print("\n3. Top 3 atores/atrizes em filmes com nota > 7.5:")
+print(q3)
+
+from datetime import datetime
+from zoneinfo import ZoneInfo
+
+agora = datetime.now(ZoneInfo("America/Sao_Paulo"))
+print(agora)
+
+```
+
